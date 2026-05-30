@@ -248,15 +248,15 @@ function renderSettings() {
       <div class="creators-count">Configure your AI connection</div>
     </div>
     <div class="add-creator-section">
-      <div class="add-label">Anthropic API Key</div>
+      <div class="add-label">Google Gemini API Key</div>
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-        Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent2)">console.anthropic.com</a>.
-        It's stored only on your device.
+        Get your free key at <a href="https://aistudio.google.com" target="_blank" style="color:var(--accent2)">aistudio.google.com</a>.
+        Stored only on your device.
       </p>
       ${hasKey ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:14px;color:var(--muted);margin-bottom:8px">
         Current key: <span style="color:var(--accent)">${masked}</span>
       </div>` : ''}
-      <input class="add-input" id="apiKeyInput" type="password" placeholder="sk-ant-..." />
+      <input class="add-input" id="apiKeyInput" type="password" placeholder="AIza..." />
       <button class="add-btn" style="margin-top:10px" onclick="saveApiKey()">
         ${hasKey ? '↺ Update API Key' : '+ Save API Key'}
       </button>
@@ -266,9 +266,9 @@ function renderSettings() {
     <div class="add-creator-section">
       <div class="add-label">How it works</div>
       <p style="font-size:13px;color:var(--muted);line-height:1.7">
-        FlowPlan calls the Claude API directly from your device using your key.
-        Your key is saved locally in your browser — never sent to any server other than Anthropic.
-        Each plan generation costs roughly $0.01–0.02.
+        FlowPlan calls the Gemini API directly from your device using your key.
+        Your key is saved locally in your browser — never sent anywhere except Google.
+        Free tier — no credit card needed. 1,500 requests/day included.
       </p>
     </div>
   `;
@@ -276,7 +276,7 @@ function renderSettings() {
 
 function saveApiKey() {
   const val = document.getElementById('apiKeyInput').value.trim();
-  if (!val.startsWith('sk-ant-')) { toast('Key should start with sk-ant-'); return; }
+  if (!val.startsWith('AIza')) { toast('Key should start with AIza'); return; }
   state.apiKey = val;
   save();
   toast('API key saved ✓');
@@ -328,7 +328,7 @@ function renderWeek() {
     (dayData.exercises || []).forEach((ex, ei) => {
       const key = `${i}-${ei}`;
       const done = state.completedExercises[key];
-      const igUrl = `https://www.instagram.com/${ex.creator}/`;
+      const igUrl = ex.creatorUrl || `https://www.instagram.com/${ex.creator}/`;
       html += `<div class="exercise-item">
         <div class="ex-done ${done ? 'checked' : ''}" onclick="toggleDone('${key}', event)"></div>
         <div class="ex-info">
@@ -356,7 +356,7 @@ function toggleDone(key, e) {
 async function generateWeek() {
   if (!state.apiKey) {
     switchTab('settings');
-    toast('Add your Anthropic API key first ↓');
+    toast('Add your Gemini API key first ↓');
     return;
   }
   state.generatingWeek = true;
@@ -371,7 +371,7 @@ User goals: mobility, home-based strength, weight loss, 3 days/week (Mon, Wed, S
 Creators available: ${creatorList}
 
 Generate a weekly plan for Monday (dayIndex 0), Wednesday (dayIndex 2), and Saturday (dayIndex 5). Each day needs 4-5 exercises.
-For each exercise include name, duration, reps, and creator (exact handle, no @).
+For each exercise include name, duration, reps, and creator (exact handle from the list, no @ sign).
 
 Assign creators intelligently:
 - Mobility/flexibility → djkim.yoga, squat_university, promethia_yoga, r.a_movement, flowwithadee, yogawithanjaly, yogiissy
@@ -379,26 +379,20 @@ Assign creators intelligently:
 - Pain/corrective → dr.jenny.pt, back_painfix, painacademy, squat_university
 - Movement flows → greymoving, movementbydavid, r.a_movement
 
-Return ONLY valid JSON, no markdown:
+Return ONLY valid JSON, no markdown, no explanation:
 {"phase":"${phase.name}","days":[{"dayIndex":0,"focus":"Day title","exercises":[{"name":"Exercise Name","duration":"3x10","reps":"each side","creator":"handle"}]},{"dayIndex":2,"focus":"...","exercises":[...]},{"dayIndex":5,"focus":"...","exercises":[...]}]}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${state.apiKey}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': state.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1000 }
       })
     });
     const data = await res.json();
-    const text = data.content.map(b => b.text || '').join('');
+    const text = data.candidates[0].content.parts[0].text;
     const clean = text.replace(/```json|```/g, '').trim();
     const plan = JSON.parse(clean);
     const days = new Array(7).fill(null);
